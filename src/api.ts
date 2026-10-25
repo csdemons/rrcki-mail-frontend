@@ -1,4 +1,3 @@
-
 import type { MailMessage, FolderName } from './types'
 
 const API_BASE = import.meta.env.VITE_MAIL_API_URL || '/api/v1'
@@ -11,7 +10,7 @@ interface ApiMessage {
   fromAddress: string
   subject: string
   preview: string
-  bodyText: string
+  bodyText?: string
   receivedAt: string
   unread: boolean
   starred: boolean
@@ -27,7 +26,10 @@ interface ApiListResponse {
 
 function formatTime(value: string): string {
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
 
   const today = new Date()
 
@@ -44,45 +46,50 @@ function formatTime(value: string): string {
   })
 }
 
+function mapFolder(folder: string): FolderName {
+  const folders: Record<string, FolderName> = {
+    INBOX: 'Входящие',
+    DRAFTS: 'Черновики',
+    SENT: 'Отправленные',
+    'SENT ITEMS': 'Отправленные',
+    ARCHIVE: 'Архив',
+    SPAM: 'Спам',
+    JUNK: 'Спам',
+    TRASH: 'Корзина',
+    'DELETED ITEMS': 'Корзина',
+    STARRED: 'Помеченные',
+  }
+
+  return folders[folder.trim().toUpperCase()] ?? 'Входящие'
+}
+
 function mapMessage(item: ApiMessage): MailMessage {
-  const allowedFolders: FolderName[] = [
-    'Входящие',
-    'Черновики',
-    'Отправленные',
-    'Архив',
-    'Спам',
-    'Корзина',
-    'Помеченные',
-  ]
-
-  const folder = allowedFolders.includes(item.folder as FolderName)
-    ? (item.folder as FolderName)
-    : 'Входящие'
-
   return {
     id: item.id,
     accountId: item.accountId,
-    folder,
+    folder: mapFolder(item.folder),
     from: item.fromName || item.fromAddress,
     email: item.fromAddress,
-    subject: item.subject,
+    subject: item.subject || '(Без темы)',
     preview: item.preview || '',
     time: formatTime(item.receivedAt),
-    body: item.bodyText || '',
+    body: item.bodyText || item.preview || '',
     unread: item.unread,
     attachment: item.hasFiles,
   }
 }
 
 export async function getMessages(
-  accountId = 'demo',
+  accountId = 'primary',
 ): Promise<MailMessage[]> {
   const response = await fetch(
     `${API_BASE}/accounts/${encodeURIComponent(accountId)}/messages`,
   )
 
   if (!response.ok) {
-    throw new Error(`Ошибка загрузки писем: HTTP ${response.status}`)
+    throw new Error(
+      `Не удалось загрузить письма: HTTP ${response.status}`,
+    )
   }
 
   const data = (await response.json()) as ApiListResponse

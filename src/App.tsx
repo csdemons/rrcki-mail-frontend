@@ -6,14 +6,14 @@ import {
   Plus, Reply, Search, Send, Settings, ShieldCheck, Star, Sun, Trash2, Users,
   X, SquarePen, Download, SlidersHorizontal, RefreshCw, BriefcaseBusiness,
 } from 'lucide-react'
-import { demoMessages } from './data'
+
 import { getMessages } from './api'
 import type { FolderName, MailFilter, MailMessage } from './types'
 
 const folderItems: { name: FolderName; count?: string; icon: typeof Inbox }[] = [
-  { name: 'Входящие', count: '204', icon: Inbox },
-  { name: 'Черновики', count: '26', icon: FilePenLine },
-  { name: 'Отправленные', count: '1', icon: Send },
+  { name: 'Входящие', icon: Inbox },
+  { name: 'Черновики', icon: FilePenLine },
+  { name: 'Отправленные', icon: Send },
   { name: 'Архив', icon: Archive },
   { name: 'Спам', icon: ShieldCheck },
   { name: 'Корзина', icon: Trash2 },
@@ -26,7 +26,7 @@ function initials(value: string) {
 
 export default function App() {
   const [folder, setFolder] = useState<FolderName | 'Все' | 'Непрочитанные'>('Входящие')
-  const [selectedId, setSelectedId] = useState('m-004')
+  const [selectedId, setSelectedId] = useState('')
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<MailFilter>('Все')
   const [dark, setDark] = useState(false)
@@ -38,82 +38,80 @@ export default function App() {
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [notice, setNotice] = useState('')
-  const [messages, setMessages] = useState<MailMessage[]>(demoMessages)
+  const [messages, setMessages] = useState<MailMessage[]>([])
   const [apiLoading, setApiLoading] = useState(false)
   const [apiError, setApiError] = useState('')
   const [starred, setStarred] = useState<string[]>([])
   const [showAccountMenu, setShowAccountMenu] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
-useEffect(() => {
-  let cancelled = false
+ 
+  useEffect(() => {
+    let cancelled = false
 
-  async function loadMessages() {
+    async function loadMessages() {
+      setApiLoading(true)
+      setApiError('')
+
+      try {
+        const result = await getMessages('primary')
+
+        if (!cancelled) {
+          setMessages(result)
+          setSelectedId((currentId) =>
+            result.some((message) => message.id === currentId)
+              ? currentId
+              : result[0]?.id ?? '',
+          )
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setApiError(
+            error instanceof Error
+              ? error.message
+              : 'Не удалось загрузить письма',
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setApiLoading(false)
+        }
+      }
+    }
+
+    void loadMessages()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function refreshMessages() {
     setApiLoading(true)
     setApiError('')
 
     try {
-      const result = await getMessages('demo')
+      const result = await getMessages('primary')
+      setMessages(result)
 
-      if (!cancelled) {
-        setMessages(result)
+      setSelectedId((currentId) =>
+        result.some((message) => message.id === currentId)
+          ? currentId
+          : result[0]?.id ?? '',
+      )
 
-        if (result.length > 0) {
-          setSelectedId((currentId) =>
-            result.some((message) => message.id === currentId)
-              ? currentId
-              : result[0].id,
-          )
-        }
-      }
+      setNotice(`Список обновлён. Получено писем: ${result.length}.`)
     } catch (error) {
-      if (!cancelled) {
-        setApiError(
-          error instanceof Error
-            ? error.message
-            : 'Не удалось загрузить письма',
-        )
-      }
+      setApiError(
+        error instanceof Error
+          ? error.message
+          : 'Не удалось загрузить письма',
+      )
     } finally {
-      if (!cancelled) {
-        setApiLoading(false)
-      }
+      setApiLoading(false)
     }
   }
 
-  void loadMessages()
-
-  return () => {
-    cancelled = true
-  }
-}, [])
-
-async function refreshMessages() {
-  setApiLoading(true)
-  setApiError('')
-
-  try {
-    const result = await getMessages('demo')
-
-    setMessages(result)
-
-    setSelectedId((currentId) =>
-      result.some((message) => message.id === currentId)
-        ? currentId
-        : result[0]?.id ?? '',
-    )
-
-    setNotice(`Список обновлён. Получено писем: ${result.length}.`)
-  } catch (error) {
-    setApiError(
-      error instanceof Error
-        ? error.message
-        : 'Не удалось загрузить письма',
-    )
-  } finally {
-    setApiLoading(false)
-  }
-}
 
 const visibleMessages = useMemo(() => messages.filter((message) => {
     const folderMatch =
@@ -130,7 +128,10 @@ const visibleMessages = useMemo(() => messages.filter((message) => {
   }), [messages, folder, filter, query, starred])
 
   const current = messages.find((message) => message.id === selectedId)
-  const unreadCount = messages.filter((message) => message.unread && message.folder === 'Входящие').length
+
+const unreadCount = messages.filter(
+  (message) => message.unread && message.folder === 'Входящие',
+).length
 
   function openComposer(mode: 'new' | 'reply' | 'forward') {
     const message = current
@@ -170,7 +171,7 @@ const visibleMessages = useMemo(() => messages.filter((message) => {
         </div>
         <button className="account-switch" onClick={() => setShowAccountMenu(!showAccountMenu)}>
           <div className="account-avatar"><Users size={20} /></div>
-          <span><strong>yushkov_do@nrcki.ru</strong><small>Входящие · Exchange (демо)</small></span>
+          <span><strong>uex2016-06@nrcki.ru</strong><small>Входящие · API · демо</small></span>
           <ChevronDown size={17} />
         </button>
         <button className="primary-button compose-top" onClick={() => openComposer('new')}>
@@ -201,14 +202,20 @@ const visibleMessages = useMemo(() => messages.filter((message) => {
         {foldersOpen && <aside className="folder-sidebar">
           <div className="sidebar-heading"><span>Основные папки</span><ChevronDown size={15} /></div>
           <div className="folder-list">
-            {folderItems.map(({ name, count, icon: Icon }) => (
-              <button key={name} className={`folder-item ${folder === name ? 'selected' : ''}`} onClick={() => setFolder(name)}>
-                <Icon size={17} />
-                <span>{name}</span>
-                {name === 'Входящие' && <b className="folder-count">{unreadCount || count}</b>}
-                {name !== 'Входящие' && count && <b className="folder-count muted-count">{count}</b>}
-              </button>
-            ))}
+           {folderItems.map(({ name, icon: Icon }) => (
+  <button
+    key={name}
+    className={`folder-item ${folder === name ? 'selected' : ''}`}
+    onClick={() => setFolder(name)}
+  >
+    <Icon size={17} />
+    <span>{name}</span>
+
+    {name === 'Входящие' && unreadCount > 0 && (
+      <b className="folder-count">{unreadCount}</b>
+    )}
+  </button>
+))}
           </div>
           <div className="sidebar-section">
             <button className="section-toggle" onClick={() => setNotice('Групповые ящики будут доступны после реализации серверного API.')}><span>Групповая почта</span><Plus size={17} /></button>
@@ -275,7 +282,19 @@ const visibleMessages = useMemo(() => messages.filter((message) => {
             ))}
             {visibleMessages.length === 0 && <div className="empty-state"><Inbox size={30} /><strong>Письма не найдены</strong><span>Измените поисковый запрос или фильтр.</span><button className="text-button" onClick={() => { setQuery(''); setFilter('Все'); setFolder('Входящие') }}>Сбросить фильтры</button></div>}
           </div>
-          <div className="list-footer"><span>{visibleMessages.length} из {messages.length} демонстрационных писем</span><span><Circle size={7} fill="#22c55e" /> Локальные данные</span></div>
+          <div className="list-footer">
+  <span>
+    {visibleMessages.length} из {messages.length} писем
+  </span>
+
+  <span>
+    <Circle
+      size={7}
+      fill={apiError ? '#ef4444' : '#22c55e'}
+    />
+    {apiError ? 'Ошибка API' : apiLoading ? 'Загрузка API' : 'API'}
+  </span>
+</div>
         </main>
 
         {readerOpen && <section className="reader-pane">
@@ -284,8 +303,21 @@ const visibleMessages = useMemo(() => messages.filter((message) => {
             <div className="reader-toolbar-spacer" />
             {current && <>
               <button className={`icon-button ${starred.includes(current.id) ? 'starred' : ''}`} aria-label="Пометить" onClick={() => setStarred((items) => items.includes(current.id) ? items.filter((id) => id !== current.id) : [...items, current.id])}><Star size={19} fill={starred.includes(current.id) ? 'currentColor' : 'none'} /></button>
-              <button className="icon-button" aria-label="Архивировать" onClick={() => moveCurrent('Архив')}><Archive size={18} /></button>
-              <button className="icon-button" aria-label="Удалить" onClick={() => moveCurrent('Корзина')}><Trash2 size={18} /></button>
+              <button
+  className="icon-button"
+  aria-label="Архивировать"
+  onClick={() => moveCurrent('Архив')}
+>
+  <Archive size={18} />
+</button>
+
+<button
+  className="icon-button"
+  aria-label="Удалить"
+  onClick={() => moveCurrent('Корзина')}
+>
+  <Trash2 size={18} />
+</button>
               <button className="icon-button" aria-label="Ещё" onClick={() => setNotice('Дополнительные действия появятся в следующих версиях.')}><MoreVertical size={18} /></button>
             </>}
             <button className="icon-button soft" aria-label="Скрыть чтение" onClick={() => setReaderOpen(false)}><PanelRightClose size={18} /></button>
@@ -333,4 +365,5 @@ const visibleMessages = useMemo(() => messages.filter((message) => {
     </div>
   )
 }
+
 
